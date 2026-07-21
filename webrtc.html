@@ -10,39 +10,111 @@
             padding: 0;
             height: 100%;
             font-family: 'Arial', sans-serif;
-        }
-        .wrapper {
-            position: relative;
-            height: 100%;
-        }
-        #video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
             background: rgb(30, 30, 30);
         }
-        #message {
-            position: absolute;
-            left: 0;
-            top: 0;
+        /* Grid of stream tiles */
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 8px;
+            padding: 8px;
+            padding-top: 50px; /* leave room for the fixed Back button */
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+        .tile {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: rgb(20, 20, 20);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .tile:hover {
+            border-color: #3498db;
+        }
+        .tile video {
             width: 100%;
             height: 100%;
+            object-fit: contain;
+            background: rgb(20, 20, 20);
+            display: block;
+        }
+        .tile-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.55);
+            color: white;
+            padding: 4px 8px;
+            font-size: 13px;
+            font-weight: bold;
+            pointer-events: none;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .tile-msg {
+            position: absolute;
+            inset: 0;
             display: flex;
             align-items: center;
-            text-align: center;
             justify-content: center;
-            font-size: 16px;
+            text-align: center;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 13px;
             font-weight: bold;
             color: white;
+            text-shadow: 0 0 5px black;
             pointer-events: none;
+        }
+
+        /* Single-view mode: only the focused tile is shown, filling the screen */
+        #grid.single-mode {
+            display: block;
+            padding: 0;
+            min-height: 0;
+        }
+        #grid.single-mode .tile {
+            display: none;
+        }
+        #grid.single-mode .tile.focused {
+            display: block;
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            aspect-ratio: auto;
+            border: none;
+            border-radius: 0;
+            cursor: default;
+            z-index: 10;
+        }
+        #grid.single-mode .tile.focused .tile-label {
+            display: none;
+        }
+
+        /* Empty state */
+        #empty {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
             padding: 20px;
-            box-sizing: border-box;
+            color: white;
+            font-weight: bold;
             text-shadow: 0 0 5px black;
         }
+
+        /* Stats overlay (single view only) */
         #stats {
-            position: absolute;
+            position: fixed;
             top: 50px;
             left: 10px;
             background-color: rgba(0, 0, 0, 0.5);
@@ -50,7 +122,7 @@
             padding: 10px;
             font-family: monospace;
             font-size: 12px;
-            z-index: 2;
+            z-index: 100;
             display: none;
         }
         #stats.visible {
@@ -59,11 +131,11 @@
         #stats-canvas {
             margin-top: 10px;
         }
-        .back-button {
-            position: absolute;
+
+        .top-button {
+            position: fixed;
             top: 10px;
-            left: 10px;
-            z-index: 100;
+            z-index: 200;
             background-color: rgba(0, 0, 0, 0.5);
             color: white;
             border: none;
@@ -73,166 +145,247 @@
             font-weight: bold;
             transition: background-color 0.3s;
         }
-        .back-button:hover {
+        .top-button:hover {
             background-color: rgba(0, 0, 0, 0.7);
         }
+        .back-button { left: 10px; }
+        .grid-button { right: 10px; display: none; }
     </style>
     <link rel="icon" href="data:,">
     <script defer src="./reader.js"></script>
 </head>
 <body>
-    <div class="wrapper">
-        <video id="video"></video>
-        <div id="message"></div>
-        <div id="stats">
-            <div id="stats-text"></div>
-            <canvas id="stats-canvas" width="130" height="200"></canvas>
-        </div>
-        <button class="back-button" onclick="window.location.href='/'">← Back</button>
+    <button class="top-button back-button" onclick="window.location.href='/'">← Back</button>
+    <button class="top-button grid-button" id="grid-btn">⤢ Grid</button>
+
+    <div id="grid"></div>
+    <div id="empty">No streams configured.<br>Add paths in the Configuration page.</div>
+
+    <div id="stats">
+        <div id="stats-text"></div>
+        <canvas id="stats-canvas" width="130" height="200"></canvas>
     </div>
 
     <script>
-        const video = document.getElementById('video');
-        const message = document.getElementById('message');
-        let defaultControls = false;
-
-        const setMessage = (str) => {
-            if (str !== '') {
-                video.controls = false;
-            } else {
-                video.controls = defaultControls;
-            }
-            message.innerText = str;
-        };
+        const WHEP_PORT = 8889;
+        const serverIP = window.location.hostname;
+        const params = new URLSearchParams(window.location.search);
 
         const parseBoolString = (str, defaultVal) => {
             str = (str || '');
-
-            if (['1', 'yes', 'true'].includes(str.toLowerCase())) {
-                return true;
-            }
-            if (['0', 'no', 'false'].includes(str.toLowerCase())) {
-                return false;
-            }
+            if (['1', 'yes', 'true'].includes(str.toLowerCase())) return true;
+            if (['0', 'no', 'false'].includes(str.toLowerCase())) return false;
             return defaultVal;
         };
 
-        const loadAttributesFromQuery = () => {
-            const params = new URLSearchParams(window.location.search);
-            video.controls = parseBoolString(params.get('controls'), true);
-            video.muted = parseBoolString(params.get('muted'), true);
-            video.autoplay = parseBoolString(params.get('autoplay'), true);
-            video.playsInline = parseBoolString(params.get('playsinline'), true);
-            defaultControls = video.controls;
+        // Video attributes shared by every tile, overridable via query string.
+        const videoDefaults = {
+            muted: parseBoolString(params.get('muted'), true),
+            autoplay: parseBoolString(params.get('autoplay'), true),
+            playsInline: parseBoolString(params.get('playsinline'), true),
+            controls: parseBoolString(params.get('controls'), true),
         };
 
-        window.addEventListener('DOMContentLoaded', () => {
-            loadAttributesFromQuery();
+        const gridEl = document.getElementById('grid');
+        const emptyEl = document.getElementById('empty');
+        const gridBtn = document.getElementById('grid-btn');
 
-            const serverIP = window.location.hostname;
-            const baseUrl = `http://${serverIP}:8889/input/whep`;
-            const stats = document.getElementById('stats');
-            const statsText = document.getElementById('stats-text');
-            const canvas = document.getElementById('stats-canvas');
-            const ctx = canvas.getContext('2d');
+        // Viewer state
+        let tiles = [];            // { path, videoEl, tileEl, msgEl, reader, pc }
+        let mode = 'grid';         // 'grid' | 'single'
+        let focusedPath = null;
 
-            // Stats tracking variables
-            let statsVisible = false;
-            const maxDataPoints = 100;
-            const bitrateData = new Array(maxDataPoints).fill(0);
-            const framerateData = new Array(maxDataPoints).fill(0);
-            let lastByteCount = 0;
-            let lastTimestamp = 0;
+        const setTileMsg = (tile, str) => {
+            tile.msgEl.innerText = str;
+        };
 
-            // Toggle stats with 'S' key
-            document.addEventListener('keydown', (e) => {
-                if (e.key.toLowerCase() === 's') {
-                    statsVisible = !statsVisible;
-                    stats.classList.toggle('visible');
-                }
-            });
+        const whepUrl = (path) =>
+            `http://${serverIP}:${WHEP_PORT}/${encodeURIComponent(path)}/whep${window.location.search}`;
 
-            function drawStats() {
-                const width = canvas.width;
-                const height = canvas.height;
-                
-                ctx.clearRect(0, 0, width, height);
-                
-                // Draw bitrate (orange)
-                ctx.strokeStyle = 'rgb(255, 165, 0)';
-                drawLine(bitrateData, width, height);
-                
-                // Draw framerate (green)
-                ctx.strokeStyle = 'rgb(0, 255, 0)';
-                drawLine(framerateData, width, height);
-            }
-
-            function drawLine(data, width, height) {
-                const maxValue = Math.max(...data);
-                if (maxValue === 0) return; // Avoid division by zero
-                
-                ctx.beginPath();
-                data.forEach((value, index) => {
-                    const x = (index / maxDataPoints) * width;
-                    const y = height - (value / maxValue) * height;
-                    if (index === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                });
-                ctx.stroke();
-            }
-
-            new MediaMTXWebRTCReader({
-                url: baseUrl + window.location.search,
+        const startReader = (tile) => {
+            if (tile.reader) return;
+            setTileMsg(tile, 'connecting…');
+            tile.reader = new MediaMTXWebRTCReader({
+                url: whepUrl(tile.path),
                 onError: (err) => {
-                    setMessage(err);
+                    tile.pc = null;
+                    setTileMsg(tile, err);
                 },
                 onTrack: (evt) => {
-                    setMessage('');
-                    video.srcObject = evt.streams[0];
-                    
-                    // Get the peer connection from the reader
-                    const pc = evt.target; // This is the RTCPeerConnection
-                    
-                    // Start stats monitoring
-                    setInterval(() => {
-                        if (!statsVisible) return;
-                        
-                        pc.getStats().then((stats) => {
-                            stats.forEach((report) => {
-                                if (report.type === 'inbound-rtp' && report.kind === 'video') {
-                                    const now = report.timestamp;
-                                    const bytes = report.bytesReceived;
-                                    const packets = report.packetsLost;
-                                    const frames = report.framesDecoded;
-
-                                    // Calculate bitrate
-                                    const bitrate = 8 * (bytes - lastByteCount) / (now - lastTimestamp) * 1000 / 1000; // kbps
-                                    lastByteCount = bytes;
-                                    lastTimestamp = now;
-
-                                    // Update data arrays
-                                    bitrateData.push(bitrate);
-                                    bitrateData.shift();
-                                    framerateData.push(report.framesPerSecond || 0);
-                                    framerateData.shift();
-
-                                    // Update text stats
-                                    statsText.innerHTML = `
-                                        Bitrate: ${bitrate.toFixed(0)} kbps<br>
-                                        FPS: ${(report.framesPerSecond || 0).toFixed(1)}<br>
-                                        Packets Lost: ${packets || 0}<br>
-                                        Resolution: ${report.frameWidth}x${report.frameHeight}
-                                    `;
-
-                                    // Draw graphs
-                                    drawStats();
-                                }
-                            });
-                        });
-                    }, 1000);
+                    setTileMsg(tile, '');
+                    tile.videoEl.srcObject = evt.streams[0];
+                    tile.pc = evt.target; // RTCPeerConnection, used for stats
                 },
             });
+        };
+
+        const stopReader = (tile) => {
+            if (tile.reader) {
+                tile.reader.close();
+                tile.reader = null;
+            }
+            tile.pc = null;
+            tile.videoEl.srcObject = null;
+            setTileMsg(tile, '');
+        };
+
+        const buildGrid = (paths) => {
+            paths.forEach((path) => {
+                const tileEl = document.createElement('div');
+                tileEl.className = 'tile';
+
+                const video = document.createElement('video');
+                video.muted = videoDefaults.muted;
+                video.autoplay = videoDefaults.autoplay;
+                video.playsInline = videoDefaults.playsInline;
+                video.controls = false; // controls only in single view
+
+                const label = document.createElement('div');
+                label.className = 'tile-label';
+                label.innerText = path;
+
+                const msg = document.createElement('div');
+                msg.className = 'tile-msg';
+
+                tileEl.append(video, label, msg);
+                gridEl.appendChild(tileEl);
+
+                const tile = { path, videoEl: video, tileEl, msgEl: msg, reader: null, pc: null };
+                tileEl.addEventListener('click', () => {
+                    if (mode === 'grid') enterSingle(path);
+                });
+                tiles.push(tile);
+            });
+        };
+
+        const enterSingle = (path) => {
+            mode = 'single';
+            focusedPath = path;
+            gridEl.classList.add('single-mode');
+            gridBtn.style.display = 'inline-block';
+
+            tiles.forEach((tile) => {
+                if (tile.path === path) {
+                    tile.tileEl.classList.add('focused');
+                    tile.videoEl.controls = videoDefaults.controls;
+                    startReader(tile); // ensure live (it already is, but safe)
+                } else {
+                    tile.tileEl.classList.remove('focused');
+                    tile.videoEl.controls = false;
+                    stopReader(tile); // release Pi-side WHEP session
+                }
+            });
+        };
+
+        const exitSingle = () => {
+            mode = 'grid';
+            focusedPath = null;
+            gridEl.classList.remove('single-mode');
+            gridBtn.style.display = 'none';
+            hideStats();
+
+            tiles.forEach((tile) => {
+                tile.tileEl.classList.remove('focused');
+                tile.videoEl.controls = false;
+                startReader(tile); // reconnect the paused streams
+            });
+        };
+
+        gridBtn.addEventListener('click', exitSingle);
+
+        // ---- Stats overlay (focused stream only) ----
+        const statsEl = document.getElementById('stats');
+        const statsText = document.getElementById('stats-text');
+        const canvas = document.getElementById('stats-canvas');
+        const ctx = canvas.getContext('2d');
+        const maxDataPoints = 100;
+        const bitrateData = new Array(maxDataPoints).fill(0);
+        const framerateData = new Array(maxDataPoints).fill(0);
+        let statsVisible = false;
+        let lastByteCount = 0;
+        let lastTimestamp = 0;
+
+        const hideStats = () => {
+            statsVisible = false;
+            statsEl.classList.remove('visible');
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 's' && mode === 'single') {
+                statsVisible = !statsVisible;
+                statsEl.classList.toggle('visible', statsVisible);
+            }
+        });
+
+        const drawLine = (data, width, height) => {
+            const maxValue = Math.max(...data);
+            if (maxValue === 0) return;
+            ctx.beginPath();
+            data.forEach((value, index) => {
+                const x = (index / maxDataPoints) * width;
+                const y = height - (value / maxValue) * height;
+                if (index === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        };
+
+        const drawStats = () => {
+            const { width, height } = canvas;
+            ctx.clearRect(0, 0, width, height);
+            ctx.strokeStyle = 'rgb(255, 165, 0)'; // bitrate
+            drawLine(bitrateData, width, height);
+            ctx.strokeStyle = 'rgb(0, 255, 0)';   // framerate
+            drawLine(framerateData, width, height);
+        };
+
+        setInterval(() => {
+            if (!statsVisible || mode !== 'single') return;
+            const tile = tiles.find((t) => t.path === focusedPath);
+            if (!tile || !tile.pc) return;
+
+            tile.pc.getStats().then((stats) => {
+                stats.forEach((report) => {
+                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                        const now = report.timestamp;
+                        const bytes = report.bytesReceived;
+                        const bitrate = 8 * (bytes - lastByteCount) / (now - lastTimestamp); // kbps
+                        lastByteCount = bytes;
+                        lastTimestamp = now;
+
+                        bitrateData.push(bitrate);
+                        bitrateData.shift();
+                        framerateData.push(report.framesPerSecond || 0);
+                        framerateData.shift();
+
+                        statsText.innerHTML = `
+                            Path: ${focusedPath}<br>
+                            Bitrate: ${bitrate.toFixed(0)} kbps<br>
+                            FPS: ${(report.framesPerSecond || 0).toFixed(1)}<br>
+                            Packets Lost: ${report.packetsLost || 0}<br>
+                            Resolution: ${report.frameWidth}x${report.frameHeight}
+                        `;
+                        drawStats();
+                    }
+                });
+            });
+        }, 1000);
+
+        // ---- Init ----
+        window.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/paths')
+                .then((r) => r.json())
+                .then((d) => d.paths || [])
+                .catch(() => [])
+                .then((paths) => {
+                    if (!paths.length) {
+                        emptyEl.style.display = 'flex';
+                        return;
+                    }
+                    buildGrid(paths);
+                    tiles.forEach(startReader);
+                });
         });
     </script>
 </body>
-</html> 
+</html>

@@ -1,9 +1,9 @@
 {
-    "name":"RTSP Relay",
+    "name":"MediaMTX",
     "description":"Configure and view RTSP streams via WebRTC",
     "icon":"mdi-video-switch",
     "company":"Willian Galvani",
-    "version":"2.0.0",
+    "version":"2.1.0",
     "webpage":"",
     "api":""
  }

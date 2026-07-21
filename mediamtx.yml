@@ -4,7 +4,8 @@ paths:
     # Change this to the URL of the RTSP stream you want to proxy
     # Default is the RTSP stream from the Syiy A8 camera
     source: rtsp://192.168.144.25:8554/main.264
-    sourceProtocol: udp
+    # renamed from 'sourceProtocol' in newer mediamtx
+    rtspTransport: udp
 
 # RTSP settings
 # play this with
@@ -15,7 +16,9 @@ rtspAddress: :8555
 
 # WebRTC settings
 webrtcAddress: :8889
-webrtcICEServers: ["stun:stun.l.google.com:19302"]
+# renamed from 'webrtcICEServers' (list of URLs) in newer mediamtx
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
 
 # Disable unused features
 api: false

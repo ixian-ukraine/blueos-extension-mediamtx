@@ -286,8 +286,34 @@
         });
     }
 
+    // Permanently tear down the reader: closes the peer connection, deletes the
+    // WHEP session on the server and prevents any further restart. Used by the
+    // grid viewer to release Pi-side WHEP sessions for streams not being watched.
+    close = () => {
+      this.state = 'closed';
+
+      if (this.restartTimeout !== null) {
+        window.clearTimeout(this.restartTimeout);
+        this.restartTimeout = null;
+      }
+
+      if (this.pc !== null) {
+        this.pc.close();
+        this.pc = null;
+      }
+
+      if (this.sessionUrl !== null) {
+        fetch(this.sessionUrl, {
+          method: 'DELETE',
+        });
+        this.sessionUrl = null;
+      }
+
+      this.queuedCandidates = [];
+    };
+
     handleError = (err) => {
-      if (this.state === 'restarting' || this.state === 'error') {
+      if (this.state === 'restarting' || this.state === 'error' || this.state === 'closed') {
         return;
       }
 

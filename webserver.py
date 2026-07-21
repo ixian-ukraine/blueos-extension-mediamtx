@@ -10,6 +10,7 @@ import sys
 import threading
 import atexit
 import logging
+import yaml
 
 # Configure logging
 logging.basicConfig(
@@ -135,6 +136,28 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(error_msg.encode())
             return
         
+        # API endpoint to list configured stream paths (for the WebRTC viewer grid)
+        if path == '/api/paths':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            names = []
+            try:
+                with open(CONFIG_PATH, 'r') as file:
+                    cfg = yaml.safe_load(file) or {}
+                paths = cfg.get('paths') or {}
+                for name in paths.keys():
+                    # Skip catch-all and regex paths: they can't form a concrete WHEP URL
+                    if name in ('all', 'all_others'):
+                        continue
+                    if isinstance(name, str) and name.startswith('~'):
+                        continue
+                    names.append(name)
+            except Exception as e:
+                logger.error(f"Error reading paths from config: {str(e)}")
+            self.wfile.write(json.dumps({'paths': names}).encode())
+            return
+
         # API endpoint to restart MediaMTX without changing config
         if path == '/api/restart':
             self.send_response(200)
