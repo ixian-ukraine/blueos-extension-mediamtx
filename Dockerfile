@@ -55,6 +55,7 @@ EXPOSE 8908
 
 # Docker labels for BlueOS
 LABEL version="2.1.0"
+LABEL org.opencontainers.image.source="https://github.com/ixian-ukraine/blueos-extension-mediamtx"
 LABEL permissions='{\
   "HostConfig": {\
     "Privileged": true,\
@@ -72,18 +73,17 @@ LABEL authors='[\
     }\
 ]'
 LABEL company='{\
-        "about": "",\
-        "name": "Blue Robotics",\
-        "email": "support@bluerobotics.com"\
+        "about": "Ixian-maintained build of the BlueOS MediaMTX extension",\
+        "name": "Ixian Ukraine"\
     }'
 LABEL type="other"
 LABEL tags='[\
         "communication"\
     ]'
-LABEL readme='https://raw.githubusercontent.com/Williangalvani/blueos-extension-MediaMTX//{tag}/README.md'
+LABEL readme='https://raw.githubusercontent.com/ixian-ukraine/blueos-extension-mediamtx/{tag}/README.md'
 LABEL links='{\
-        "website": "https://github.com/Williangalvani/blueos-extension-MediaMTX/",\
-        "support": "https://github.com/Williangalvani/blueos-extension-MediaMTX//issues"\
+        "website": "https://github.com/ixian-ukraine/blueos-extension-mediamtx",\
+        "support": "https://github.com/ixian-ukraine/blueos-extension-mediamtx/issues"\
     }'
 
 # Use the start script as entrypoint

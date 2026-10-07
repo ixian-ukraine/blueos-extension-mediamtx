@@ -2,8 +2,8 @@
     "name":"MediaMTX",
     "description":"Configure and view RTSP streams via WebRTC",
     "icon":"mdi-video-switch",
-    "company":"Willian Galvani",
+    "company":"Ixian Ukraine",
     "version":"2.1.0",
-    "webpage":"",
+    "webpage":"https://github.com/ixian-ukraine/blueos-extension-mediamtx",
     "api":""
  }

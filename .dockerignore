@@ -1,0 +1,7 @@
+.git
+.github
+.catalog
+__pycache__
+*.pyc
+*.tar
+.DS_Store

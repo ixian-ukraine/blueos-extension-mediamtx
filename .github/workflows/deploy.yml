@@ -1,20 +1,23 @@
-name: Deploy BlueOS Extension Image
+name: Publish BlueOS extension
 
 on:
   push:
-  # Run manually
+    tags: ['[0-9]*', 'v[0-9]*']
   workflow_dispatch:
-  # NOTE: caches may be removed if not run weekly
-  #  -> may be worth scheduling for every 6 days
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  deploy-docker-image:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy BlueOS Extension
-        uses: williangalvani/Deploy-BlueOS-Extension@v1
-        with:
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-password: ${{ secrets.DOCKER_PASSWORD }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-name: 'extension-mediamtx'
+  publish:
+    uses: ixian-ukraine/blueos-extensions/.github/workflows/publish-extension.yml@main
+    with:
+      identifier: ixian-ukraine.mediamtx
+      name: MediaMTX (Ixian)
+      description: RTSP camera relay, WebRTC grid viewer, and configuration editor for BlueOS.
+      web-port: 8908
