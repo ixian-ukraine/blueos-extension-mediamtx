@@ -40,3 +40,15 @@ Configuration page, or delete `/usr/blueos/extensions/mediamtx/mediamtx.yml` to 
 ## Version label
 - Keep `Dockerfile` `LABEL version` and `register_service` `"version"` in sync
   (currently **2.1.0**).
+
+## Ixian release distribution
+- Publish version tags to `ixian-ukraine/blueos-extension-mediamtx` (local remote
+  `ixian`); `origin` continues to point at the original upstream repository.
+- The release workflow builds Linux ARM64 on a native GitHub runner, smoke-tests
+  the HTTP service, then publishes to
+  `ghcr.io/ixian-ukraine/blueos-extension-mediamtx`.
+- The shared release workflow and catalog generator live in
+  `ixian-ukraine/blueos-extensions`. Each release includes a
+  `blueos-manifest.json` asset containing its image digest and permissions.
+- For a manual workflow retry, select the version tag as the workflow ref.
+- First-time GHCR packages must be set to Public in GitHub package settings.
